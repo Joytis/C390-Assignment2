@@ -1,0 +1,17 @@
+{
+	"folders":
+	[
+		{
+			"path": ".",
+			"file_exclude_patterns": ["mysh2", "myls"]
+		}
+	],
+	"build_systems":
+	[
+		{
+			"name": "Wsl Make",
+			"cmd" : ["bash", "-c", "make"],
+			"shell": true,
+		}
+	]
+}
