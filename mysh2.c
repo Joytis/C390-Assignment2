@@ -70,8 +70,7 @@ split_args split_into_args(const char* line, const char* delim)
 {
 	// Precondition
 	assert(line != NULL);
-	assert(line != NULL);
-	assert(strlen(delim) != 0);
+	assert(delim != NULL);
 
 	// Copy the line of text. 
 	char* buffer = strdup(line);
@@ -86,7 +85,7 @@ split_args split_into_args(const char* line, const char* delim)
 		}
 	}
 
-	char* token = strtok (buffer, delim);
+	char* token = strtok(buffer, delim);
 	int argc = 0;
 
 	// Tokenize string
@@ -183,21 +182,20 @@ void run_shell(int argc, char** argv) {
 	else {
 
 		const char* real_system_path = getenv("PATH");
-		const char* system_path = malloc(strlen(real_system_path));
+		const char* system_path = strdup(real_system_path);
 
-		split_args path_args = split_into_args(system_path, ";");
+		split_args path_args = split_into_args(system_path, ":");
 
 		char* path = alloc_find_in_path(command, &path_args);
 		if(path != NULL) {
 			execute_child(path, argv);
 			free(path);
 		}
+		else {
+			printf("%s: command not found\n", command);
+		}
 
 		free_cmd_args(&path_args);
-
-		printf("%s: command not found\n", command);
-
-		return;
 	}
 }
 
