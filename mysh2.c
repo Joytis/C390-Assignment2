@@ -38,35 +38,56 @@ void prompt_user()
 	printf("%s", prompt_carat);
 }
 
-bool file_executable(const char* filename)
+bool file_executable(char* filename)
 {
-	return access(filename, F_OK) != -1;
+	return access(filename, X_OK) != -1;
 }
 
 
 // Try to find the program in our path. 
-char* alloc_find_in_path(const char* command, const split_args* args)
+char* alloc_find_in_path(char* command, const split_args* args)
 {
 	for(int i = 0; i < args->argc; i++) {
-		const char* dir = args->argv[i];
+		char* dir = args->argv[i];
 		const int dir_len = strlen(dir);
 		const int cmd_len = strlen(command);
 		const int total_len = strlen(dir) + strlen(command) + 2; // +1 for '/' + for NULL
 
-		char* composite_path = strndup(dir, total_len);
+		char* composite_path = malloc(total_len);
+
+		strcpy(composite_path, dir);
 		composite_path[dir_len] = '/';
 		strcpy(&composite_path[dir_len + 1], command);
 
 		if(file_executable(composite_path)) {
 			return composite_path;
 		}
+		else {
+			free(composite_path);
+		}
 	}
 
 	return NULL;
 }
 
+int count_num_tokens(char* buffer, char* delim)
+{
+	// Counting buffer. 
+	char* counting_buffer = strdup(buffer);
+	char* token = strtok(counting_buffer, delim);
+	int argc = 0;
+
+	// Count the number of tokens in string. 
+	while(token) {
+		argc++;
+		token = strtok(NULL, delim);
+	}
+	free(counting_buffer);
+	return argc;
+}
+
 // Parse a line into posix cmd args. 
-split_args split_into_args(const char* line, const char* delim)
+split_args split_into_args(char* line, char* delim)
 {
 	// Precondition
 	assert(line != NULL);
@@ -76,8 +97,6 @@ split_args split_into_args(const char* line, const char* delim)
 	char* buffer = strdup(line);
 	int line_len = strlen(buffer);
 
-	// Split it into tokens. 
-	char **argv = NULL;
 	// destroy newline characters
 	for(int i = 0; i < line_len; i++) {
 		if(buffer[i] == '\n') {
@@ -85,22 +104,21 @@ split_args split_into_args(const char* line, const char* delim)
 		}
 	}
 
-	char* token = strtok(buffer, delim);
-	int argc = 0;
-
-	// Tokenize string
-	while(token) {
-		argc++;
-		argv = realloc(argv, sizeof(char*) * argc);
-
-		assert(argv != NULL);
-		argv[argc - 1] = token;
-		token = strtok(NULL, delim);
-	}
+	int argc = count_num_tokens(buffer, delim);
 
 	// Add trailing NULL for free call.
-	argv = realloc(argv, sizeof(char*) * (argc + 1));
-	argv[argc] = 0;
+	char **argv = malloc(sizeof(char*) * (argc + 1));
+
+	// Record the tokens into argument array. 
+	char* token = strtok(buffer, delim);
+	int current_pos = 0;
+	while(token)
+	{
+		argv[current_pos] = token;
+		current_pos++;
+		token = strtok(NULL, delim);
+	}
+	argv[argc] = NULL;
 
 	// Construct and return value
 	split_args args;
@@ -114,17 +132,11 @@ split_args split_into_args(const char* line, const char* delim)
 // Free our command arguments. 
 void free_cmd_args(split_args* args)
 {
-	free(args->argv);
+	free(args->argv);	
 	free(args->buffer);
 }
 
-// bool file_exists(const char* filename)
-// {
-// 	return access(filename, F_OK) != -1;
-// }
-
-
-bool directory_exists(const char* dirname)
+bool directory_exists(char* dirname)
 {
 	struct stat sb;
 	return (stat(dirname, &sb) == 0 && S_ISDIR(sb.st_mode));
@@ -134,7 +146,7 @@ bool directory_exists(const char* dirname)
 // MAIN BOOTSTRAP
 //==========================================
 
-int execute_child(const char* path, char** argv)
+int execute_child(char* path, char** argv)
 {
 	assert(path != NULL);
 	assert(argv != NULL);
@@ -167,22 +179,30 @@ void run_shell(int argc, char** argv) {
 	// No command. 
 	if(argc < 1) return;
 
-	const char* command = argv[0];
+	char* command = argv[0];
+	assert(strlen(command) > 0);
+	bool is_relative = (command[0] == '.');
+	bool is_absolute = (command[0] == '/');
 
 	// Leave if we exit lol
 	if(STREQL(command, "exit")) {
 		exit (EXIT_SUCCESS);
 	}
 
-	// Check file exists at path. 
-	if(file_executable(command)) {
-		execute_child(command, argv);
+	// Relative path. 
+	if(is_relative || is_absolute) {
+		// Check file exists at path. 
+		if(file_executable(command)) {
+			execute_child(command, argv);
+		}
+		else {
+			printf("%s: command not found\n", command);
+		}
 	}
-	// Consult the path. 
+	// Not relative and not absolute? Consult the path. 
 	else {
-
-		const char* real_system_path = getenv("PATH");
-		const char* system_path = strdup(real_system_path);
+		char* real_system_path = getenv("PATH");
+		char* system_path = strdup(real_system_path);
 
 		split_args path_args = split_into_args(system_path, ":");
 
@@ -195,6 +215,7 @@ void run_shell(int argc, char** argv) {
 			printf("%s: command not found\n", command);
 		}
 
+		free(system_path);
 		free_cmd_args(&path_args);
 	}
 }
@@ -221,7 +242,6 @@ int main(int argc, char** argv) {
 
 		// Free resources. 
 		free_cmd_args(&args);
-	    free(line);
 
 		// Flush input buffer
 		fflush(stdin);
